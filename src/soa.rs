@@ -7,7 +7,7 @@ use std::ptr;
 use std::slice;
 use std::str;
 
-use types:: AresError ;
+use types::AresError ;
 use utils::ares_error;
 
 /// The result of a successful SOA lookup.
@@ -16,7 +16,13 @@ pub struct SOAResult {
 }
 
 impl SOAResult {
-    /// Obtain a `SOAResult` from the response to a CNAME lookup.
+    #[cfg(feature = "old-cares")]
+    pub fn parse_from(data: &[u8]) -> Result<SOAResult, AresError> {
+        panic!("SOA parsing not supported");
+    }
+
+    /// Obtain an `SOAResult` from the response to a CNAME lookup.
+    #[cfg(not(feature = "old-cares"))]
     pub fn parse_from(data: &[u8]) -> Result<SOAResult, AresError> {
         let mut soa_reply: *mut c_ares_sys::Struct_ares_soa_reply = ptr::null_mut();
         let parse_status = unsafe {
