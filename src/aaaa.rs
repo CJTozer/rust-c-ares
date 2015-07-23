@@ -17,13 +17,12 @@ use utils::ares_error;
 
 /// The result of a successful AAAA lookup.
 pub struct AAAAResults {
-    // This pointer is owned by the `AAAAResults`.
     hostent: *mut hostent,
+    phantom: PhantomData<hostent>,
 }
 
 /// The contents of a single AAAA record.
 pub struct AAAAResult<'a> {
-    // This pointer is a reference to a value in an `AAAAResults`.
     h_addr: *mut libc::c_char,
     phantom: PhantomData<&'a AAAAResults>,
 }
@@ -50,6 +49,7 @@ impl AAAAResults {
     fn new(hostent: *mut hostent) -> AAAAResults {
         AAAAResults {
             hostent: hostent,
+            phantom: PhantomData,
         }
     }
 
@@ -113,6 +113,13 @@ impl Drop for AAAAResults {
         }
     }
 }
+
+unsafe impl Send for AAAAResults { }
+unsafe impl Sync for AAAAResults { }
+unsafe impl<'a> Send for AAAAResult<'a> { }
+unsafe impl<'a> Sync for AAAAResult<'a> { }
+unsafe impl<'a> Send for AAAAResultsIterator<'a> { }
+unsafe impl<'a> Sync for AAAAResultsIterator<'a> { }
 
 impl<'a> AAAAResult<'a> {
     /// Returns the IPv6 address in this `AAAAResult`.

@@ -2,6 +2,7 @@ extern crate c_ares_sys;
 extern crate libc;
 
 use std::ffi::CString;
+use std::marker::PhantomData;
 use std::mem;
 use std::os::unix::io;
 use std::ptr;
@@ -23,6 +24,10 @@ use mx::{
     MXResults,
     query_mx_callback,
 };
+use naptr::{
+    NAPTRResults,
+    query_naptr_callback,
+};
 use ns::{
     NSResults,
     query_ns_callback,
@@ -30,6 +35,10 @@ use ns::{
 use ptr::{
     PTRResults,
     query_ptr_callback,
+};
+use srv::{
+    SRVResults,
+    query_srv_callback,
 };
 use types::{
     AresError,
@@ -171,6 +180,7 @@ impl Options {
 #[derive(Debug)]
 pub struct Channel {
     ares_channel: c_ares_sys::ares_channel,
+    phantom: PhantomData<c_ares_sys::Struct_ares_channeldata>,
 }
 
 impl Channel {
@@ -233,6 +243,7 @@ impl Channel {
 
         let channel = Channel {
             ares_channel: ares_channel,
+            phantom: PhantomData,
         };
         Ok(channel)
     }
@@ -344,6 +355,24 @@ impl Channel {
         }
     }
 
+    /// Look up the NAPTR records associated with `name`.
+    ///
+    /// On completion, `handler` is called with the result.
+    pub fn query_naptr<F>(&mut self, name: &str, handler: F)
+        where F: FnOnce(Result<NAPTRResults, AresError>) + 'static {
+        let c_name = CString::new(name).unwrap();
+        unsafe {
+            let c_arg: *mut libc::c_void = mem::transmute(Box::new(handler));
+            c_ares_sys::ares_query(
+                self.ares_channel,
+                c_name.as_ptr(),
+                DnsClass::IN as libc::c_int,
+                QueryType::NAPTR as libc::c_int,
+                Some(query_naptr_callback::<F>),
+                c_arg);
+        }
+    }
+
     /// Look up the NS records associated with `name`.
     ///
     /// On completion, `handler` is called with the result.
@@ -376,6 +405,24 @@ impl Channel {
                 DnsClass::IN as libc::c_int,
                 QueryType::PTR as libc::c_int,
                 Some(query_ptr_callback::<F>),
+                c_arg);
+        }
+    }
+
+    /// Look up the SRV records associated with `name`.
+    ///
+    /// On completion, `handler` is called with the result.
+    pub fn query_srv<F>(&mut self, name: &str, handler: F)
+        where F: FnOnce(Result<SRVResults, AresError>) + 'static {
+        let c_name = CString::new(name).unwrap();
+        unsafe {
+            let c_arg: *mut libc::c_void = mem::transmute(Box::new(handler));
+            c_ares_sys::ares_query(
+                self.ares_channel,
+                c_name.as_ptr(),
+                DnsClass::IN as libc::c_int,
+                QueryType::SRV as libc::c_int,
+                Some(query_srv_callback::<F>),
                 c_arg);
         }
     }
@@ -427,6 +474,9 @@ impl Drop for Channel {
 }
 
 unsafe impl Send for Channel { }
+unsafe impl Sync for Channel { }
+unsafe impl Send for Options { }
+unsafe impl Sync for Options { }
 
 pub unsafe extern "C" fn socket_callback<F>(
     data: *mut libc::c_void,

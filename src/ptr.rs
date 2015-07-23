@@ -16,13 +16,12 @@ use utils::ares_error;
 
 /// The result of a successful PTR lookup.
 pub struct PTRResults {
-    // This pointer is owned by the `PTRResults`.
     hostent: *mut hostent,
+    phantom: PhantomData<hostent>,
 }
 
 /// The contents of a single PTR record.
 pub struct PTRResult<'a> {
-    // This pointer is a reference to a value in a `PTRResults`.
     h_alias: *mut libc::c_char,
     phantom: PhantomData<&'a PTRResults>,
 }
@@ -52,6 +51,7 @@ impl PTRResults {
     fn new(hostent: *mut hostent) -> PTRResults {
         PTRResults {
             hostent: hostent,
+            phantom: PhantomData,
         }
     }
 
@@ -107,6 +107,13 @@ impl Drop for PTRResults {
         }
     }
 }
+
+unsafe impl Send for PTRResults { }
+unsafe impl Sync for PTRResults { }
+unsafe impl<'a> Send for PTRResult<'a> { }
+unsafe impl<'a> Sync for PTRResult<'a> { }
+unsafe impl<'a> Send for PTRResultsIterator<'a> { }
+unsafe impl<'a> Sync for PTRResultsIterator<'a> { }
 
 impl<'a> PTRResult<'a> {
     /// Returns the canonical name in this `PTRResult`.

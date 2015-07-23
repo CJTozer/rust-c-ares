@@ -2,6 +2,7 @@ extern crate c_ares_sys;
 extern crate libc;
 
 use std::ffi::CStr;
+use std::marker::PhantomData;
 use std::mem;
 use std::ptr;
 use std::slice;
@@ -13,11 +14,12 @@ use utils::ares_error;
 /// The result of a successful SOA lookup.
 pub struct SOAResult {
     soa_reply: *mut c_ares_sys::Struct_ares_soa_reply,
+    phantom: PhantomData<c_ares_sys::Struct_ares_soa_reply>,
 }
 
 impl SOAResult {
     #[cfg(feature = "old-cares")]
-    pub fn parse_from(data: &[u8]) -> Result<SOAResult, AresError> {
+    pub fn parse_from(_data: &[u8]) -> Result<SOAResult, AresError> {
         panic!("SOA parsing not supported");
     }
 
@@ -42,6 +44,7 @@ impl SOAResult {
     fn new(soa_reply: *mut c_ares_sys::Struct_ares_soa_reply) -> SOAResult {
         SOAResult {
             soa_reply: soa_reply,
+            phantom: PhantomData,
         }
     }
 
@@ -94,6 +97,9 @@ impl Drop for SOAResult {
         }
     }
 }
+
+unsafe impl Send for SOAResult { }
+unsafe impl Sync for SOAResult { }
 
 pub unsafe extern "C" fn query_soa_callback<F>(
     arg: *mut libc::c_void,

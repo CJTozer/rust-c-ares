@@ -17,13 +17,12 @@ use utils::ares_error;
 
 /// The result of a successful A lookup.
 pub struct AResults {
-    // This pointer is owned by the `AResults`.
     hostent: *mut hostent,
+    phantom: PhantomData<hostent>,
 }
 
 /// The contents of a single A record.
 pub struct AResult<'a> {
-    // This pointer is a reference to a value in an `AResults`
     h_addr: *mut libc::c_char,
     phantom: PhantomData<&'a AResults>,
 }
@@ -51,6 +50,7 @@ impl AResults {
     fn new(hostent: *mut hostent) -> AResults {
         AResults {
             hostent: hostent,
+            phantom: PhantomData,
         }
     }
 
@@ -113,6 +113,13 @@ impl Drop for AResults {
         }
     }
 }
+
+unsafe impl Send for AResults { }
+unsafe impl Sync for AResults { }
+unsafe impl<'a> Send for AResult<'a> { }
+unsafe impl<'a> Sync for AResult<'a> { }
+unsafe impl<'a> Send for AResultsIterator<'a> { }
+unsafe impl<'a> Sync for AResultsIterator<'a> { }
 
 impl<'a> AResult<'a> {
     /// Returns the IPv4 address in this `AResult`.
