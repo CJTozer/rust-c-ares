@@ -1,7 +1,9 @@
 // Simple example using `Futures`.
 extern crate c_ares;
+extern crate eventual;
 
 use std::sync::mpsc;
+use eventual::{Future, Async};
 
 // TODO - commonize with the other example(s).
 fn print_a_results(result: Result<c_ares::AResults, c_ares::AresError>) {
@@ -42,15 +44,15 @@ impl Resolver {
         Resolver { ares_channel: ares_channel }
     }
 
-    fn a_query_as_future(&mut self, name: &str) -> Box<Fn() -> Result<c_ares::AResults, c_ares::AresError>> {
+    fn a_query_as_future(&mut self, name: &str) -> Future<Result<c_ares::AResults, c_ares::AresError>, ()> {
         // Make the query.
         let (tx, rx) = mpsc::channel();
         self.ares_channel.query_a(name, move |results| {
             tx.send(results).unwrap();
         });
         
-        // Return a closure that waits to receive the result.
-        Box::new(move || {
+        // Return a Future
+        Future::spawn(move || {
             rx.recv().unwrap()
         })
     }
@@ -59,11 +61,11 @@ impl Resolver {
 fn main() {
     // Perform a query, getting the result as a future.
     let mut resolver = Resolver::new();
-    let get_results = resolver.a_query_as_future("apple.com");
+    let results_future = resolver.a_query_as_future("apple.com");
 
     // Do some other stuff here while we wait
     // ...
 
     // Wait for and print the results
-    print_a_results(get_results());
+    print_a_results(results_future.await().ok().expect("Future failed to complete"));
 }
