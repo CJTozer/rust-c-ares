@@ -55,6 +55,7 @@ impl Resolver {
         
         // Return a Future
         Future::spawn(move || {
+            self.ares_channel.wait_channel();
             rx.recv().unwrap()
         })
     }
