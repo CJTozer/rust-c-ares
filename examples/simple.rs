@@ -29,7 +29,9 @@ struct Resolver {
 impl Resolver {
     fn new() -> Resolver {
         // Dummy callback.
-        let dummy_callback = move |_: i32, _: bool, _: bool| {};
+        let dummy_callback = move |fd: i32, readable: bool, writeable: bool| {
+            println!("callback: {} {} {}", fd, readable, writeable);
+        };
 
         // Create a c_ares::Channel.
         let mut options = c_ares::Options::new();
