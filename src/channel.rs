@@ -284,6 +284,18 @@ impl Channel {
         }
     }
 
+    /// Wait for results...
+    pub fn wait_channel(&self) {
+        unsafe {
+            let mut socks: [c_ares_sys::ares_socket_t; 16] = [0; 16]; //c_ares_sys::ARES_GETSOCK_MAXNUM
+            let bitmask = c_ares_sys::ares_getsock(
+                self.ares_channel,
+                mem::transmute(&socks),
+                16); //c_ares_sys::ARES_GETSOCK_MAXNUM
+            println!("Bitmask: {}", bitmask);
+        }
+    }
+
     /// Set the list of servers to contact, instead of the servers specified
     /// in resolv.conf or the local named.
     ///
