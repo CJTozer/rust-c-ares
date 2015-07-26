@@ -29,11 +29,16 @@ struct Resolver {
 impl Resolver {
     fn new() -> Resolver {
         // Dummy callback.
-        let dummy_callback = move |fd: i32, readable: bool, writeable: bool| {
-            println!("callback: {} {} {}", fd, readable, writeable);
-        };
+        //
+        // Not used here as we explicitly use `wait_channel` when we need to 
+        // get at the results.
+        //
+        // I'd prefer that this callback could call `process_fd` on the
+        // underlying `c_ares_sys::ares_channel`, but given the callback is
+        // passed to the `c_ares::Channel` contructor, that becomes tricky.
+        let dummy_callback = move |_: i32, _: bool, _: bool| {};
 
-        // Create a c_ares::Channel.
+        // Create a `c_ares::Channel`.
         let mut options = c_ares::Options::new();
         options
             //.set_flags(c_ares::flags::STAYOPEN | c_ares::flags::EDNS)
@@ -50,15 +55,22 @@ impl Resolver {
         // Make the query.
         let (tx, rx) = mpsc::channel();
         let mut channel = self.ares_channel.lock().unwrap();
+
         channel.query_a(name, move |results| {
+            // Send the results when they arrive.
             tx.send(results).unwrap();
         });
         
-        // Return a Future
+        // Return a `Future` that will eventually get the result.
         let channel_clone = self.ares_channel.clone();
         Future::spawn(move || {
-            // This should do the wait_channel stuff really...
-            rx.recv().unwrap()
+            loop {
+                // Wait until we have a result, kicking the channel if not.
+                match rx.try_recv() {
+                    Ok(response) => return response,
+                    _ => channel_clone.lock().unwrap().wait_channel(),
+                }
+            }
         })
     }
 }
@@ -72,11 +84,9 @@ fn main() {
     // ...
 
     // Wait for and print the results
-    while !results_future.is_ready() {
-        // Kick the resolver...
-        let mut channel = resolver.ares_channel.lock().unwrap();
-        channel.wait_channel();
-    }
-
-    print_a_results(results_future.await().ok().expect("Future failed to complete"));
+    let results = results_future
+        .await()
+        .ok()
+        .expect("Future failed to complete");
+    print_a_results(results);
 }

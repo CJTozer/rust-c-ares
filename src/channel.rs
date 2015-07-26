@@ -284,7 +284,7 @@ impl Channel {
         }
     }
 
-    /// Wait for results...
+    /// Wait for results by kicking open file descriptors...
     pub fn wait_channel(&mut self) {
         let socks: [c_ares_sys::ares_socket_t; 16] = [0; 16]; //c_ares_sys::ARES_GETSOCK_MAXNUM
         let mut bitmask = unsafe {
@@ -295,7 +295,6 @@ impl Channel {
         };
 
         for s in socks.into_iter() {
-            println!("Sock: {}", s);
             if bitmask & 1 != 0 {
                 self.process_fd(*s, c_ares_sys::ARES_SOCKET_BAD);
             }
