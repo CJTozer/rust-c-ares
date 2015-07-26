@@ -19,8 +19,8 @@ pub struct TXTResults {
 
 /// The contents of a single TXT record.
 pub struct TXTResult<'a> {
-    txt_reply: *mut c_ares_sys::Struct_ares_txt_reply,
-    phantom: PhantomData<&'a TXTResults>,
+    txt_reply: *const c_ares_sys::Struct_ares_txt_reply,
+    phantom: PhantomData<&'a c_ares_sys::Struct_ares_txt_reply>,
 }
 
 impl TXTResults {
@@ -57,8 +57,8 @@ impl TXTResults {
 }
 
 pub struct TXTResultsIterator<'a> {
-    next: *mut c_ares_sys::Struct_ares_txt_reply,
-    phantom: PhantomData<&'a TXTResults>,
+    next: *const c_ares_sys::Struct_ares_txt_reply,
+    phantom: PhantomData<&'a c_ares_sys::Struct_ares_txt_reply>,
 }
 
 impl<'a> Iterator for TXTResultsIterator<'a> {
@@ -84,10 +84,7 @@ impl<'a> IntoIterator for &'a TXTResults {
     type IntoIter = TXTResultsIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        TXTResultsIterator {
-            next: self.txt_reply,
-            phantom: PhantomData,
-        }
+        self.iter()
     }
 }
 
@@ -123,12 +120,12 @@ pub unsafe extern "C" fn query_txt_callback<F>(
     abuf: *mut libc::c_uchar,
     alen: libc::c_int)
     where F: FnOnce(Result<TXTResults, AresError>) + 'static {
+    let handler: Box<F> = mem::transmute(arg);
     let result = if status != c_ares_sys::ARES_SUCCESS {
         Err(ares_error(status))
     } else {
         let data = slice::from_raw_parts(abuf, alen as usize);
         TXTResults::parse_from(data)
     };
-    let handler: Box<F> = mem::transmute(arg);
     handler(result);
 }

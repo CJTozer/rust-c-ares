@@ -22,8 +22,8 @@ pub struct NSResults {
 
 /// The contents of a single NS record.
 pub struct NSResult<'a> {
-    h_alias: *mut libc::c_char,
-    phantom: PhantomData<&'a NSResults>,
+    h_alias: *const libc::c_char,
+    phantom: PhantomData<&'a hostent>,
 }
 
 impl NSResults {
@@ -54,15 +54,15 @@ impl NSResults {
     /// `NSResults`.
     pub fn iter(&self) -> NSResultsIterator {
         NSResultsIterator {
-            next: unsafe { (*self.hostent).h_aliases },
+            next: unsafe { (*self.hostent).h_aliases as *const *const _ },
             phantom: PhantomData,
         }
     }
 }
 
 pub struct NSResultsIterator<'a> {
-    next: *mut *mut libc::c_char,
-    phantom: PhantomData<&'a NSResults>,
+    next: *const *const libc::c_char,
+    phantom: PhantomData<&'a hostent>,
 }
 
 impl<'a> Iterator for NSResultsIterator<'a> {
@@ -87,10 +87,7 @@ impl<'a> IntoIterator for &'a NSResults {
     type IntoIter = NSResultsIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        NSResultsIterator {
-            next: unsafe { (*self.hostent).h_aliases },
-            phantom: PhantomData,
-        }
+        self.iter()
     }
 }
 
@@ -127,12 +124,12 @@ pub unsafe extern "C" fn query_ns_callback<F>(
     abuf: *mut libc::c_uchar,
     alen: libc::c_int)
     where F: FnOnce(Result<NSResults, AresError>) + 'static {
+    let handler: Box<F> = mem::transmute(arg);
     let result = if status != c_ares_sys::ARES_SUCCESS {
         Err(ares_error(status))
     } else {
         let data = slice::from_raw_parts(abuf, alen as usize);
         NSResults::parse_from(data)
     };
-    let handler: Box<F> = mem::transmute(arg);
     handler(result);
 }

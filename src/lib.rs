@@ -31,8 +31,11 @@ mod srv;
 mod channel;
 mod cname;
 pub mod flags;
+mod host;
 mod mx;
+mod nameinfo;
 mod naptr;
+pub mod ni_flags;
 mod ns;
 mod ptr;
 mod types;
@@ -58,9 +61,17 @@ pub use channel::{
     Options,
 };
 pub use cname::CNameResult;
+pub use host::{
+    HostAddressResult,
+    HostAliasResult,
+    HostResults,
+};
 pub use mx::{
     MXResult,
     MXResults,
+};
+pub use nameinfo::{
+    NameInfoResult,
 };
 pub use naptr::{
     NAPTRResult,
@@ -75,8 +86,10 @@ pub use ptr::{
     PTRResults,
 };
 pub use types::{
+    AddressFamily,
     AresError,
     INVALID_FD,
+    IpAddr,
 };
 pub use txt::{
     TXTResult,

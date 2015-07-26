@@ -23,8 +23,8 @@ pub struct AAAAResults {
 
 /// The contents of a single AAAA record.
 pub struct AAAAResult<'a> {
-    h_addr: *mut libc::c_char,
-    phantom: PhantomData<&'a AAAAResults>,
+    h_addr: *const libc::c_char,
+    phantom: PhantomData<&'a hostent>,
 }
 
 impl AAAAResults {
@@ -65,15 +65,15 @@ impl AAAAResults {
     /// `AAAAResults`.
     pub fn iter(&self) -> AAAAResultsIterator {
         AAAAResultsIterator {
-            next: unsafe { (*self.hostent).h_addr_list },
+            next: unsafe { (*self.hostent).h_addr_list as *const *const _ },
             phantom: PhantomData,
         }
     }
 }
 
 pub struct AAAAResultsIterator<'a> {
-    next: *mut *mut libc::c_char,
-    phantom: PhantomData<&'a AAAAResults>,
+    next: *const *const libc::c_char,
+    phantom: PhantomData<&'a hostent>,
 }
 
 impl<'a> Iterator for AAAAResultsIterator<'a> {
@@ -98,10 +98,7 @@ impl<'a> IntoIterator for &'a AAAAResults {
     type IntoIter = AAAAResultsIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        AAAAResultsIterator {
-            next: unsafe { (*self.hostent).h_addr_list },
-            phantom: PhantomData,
-        }
+        self.iter()
     }
 }
 
@@ -146,12 +143,12 @@ pub unsafe extern "C" fn query_aaaa_callback<F>(
     abuf: *mut libc::c_uchar,
     alen: libc::c_int)
     where F: FnOnce(Result<AAAAResults, AresError>) + 'static {
+    let handler: Box<F> = mem::transmute(arg);
     let result = if status != c_ares_sys::ARES_SUCCESS {
         Err(ares_error(status))
     } else {
         let data = slice::from_raw_parts(abuf, alen as usize);
         AAAAResults::parse_from(data)
     };
-    let handler: Box<F> = mem::transmute(arg);
     handler(result);
 }

@@ -4,6 +4,11 @@ extern crate libc;
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::mem;
+use std::net::{
+    Ipv4Addr,
+    Ipv6Addr,
+    SocketAddr,
+};
 use std::os::unix::io;
 use std::ptr;
 
@@ -20,14 +25,23 @@ use cname::{
     query_cname_callback,
 };
 use flags::Flags;
+use host::{
+    HostResults,
+    get_host_callback,
+};
 use mx::{
     MXResults,
     query_mx_callback,
+};
+use nameinfo::{
+    NameInfoResult,
+    get_name_info_callback,
 };
 use naptr::{
     NAPTRResults,
     query_naptr_callback,
 };
+use ni_flags::NIFlags;
 use ns::{
     NSResults,
     query_ns_callback,
@@ -41,8 +55,10 @@ use srv::{
     query_srv_callback,
 };
 use types::{
+    AddressFamily,
     AresError,
     DnsClass,
+    IpAddr,
     QueryType,
 };
 use txt::{
@@ -53,7 +69,13 @@ use soa::{
     SOAResult,
     query_soa_callback,
 };
-use utils::ares_error;
+use utils::{
+  ares_error,
+  ipv4_as_in_addr,
+  ipv6_as_in6_addr,
+  socket_addrv4_as_sockaddr_in,
+  socket_addrv6_as_sockaddr_in6,
+};
 
 /// Used to configure the behaviour of the name resolver.
 #[derive(Clone)]
@@ -177,7 +199,6 @@ impl Options {
 }
 
 /// A channel for name service lookups.
-#[derive(Debug)]
 pub struct Channel {
     ares_channel: c_ares_sys::ares_channel,
     phantom: PhantomData<c_ares_sys::Struct_ares_channeldata>,
@@ -268,7 +289,7 @@ impl Channel {
     ///
     /// String format is `host[:port]`.  IPv6 addresses with ports require
     /// square brackets eg `[2001:4860:4860::8888]:53`.
-    pub fn set_servers(&mut self, servers: &[&str]) -> Result<(), AresError> {
+    pub fn set_servers(&mut self, servers: &[&str]) -> Result<&mut Self, AresError> {
         let servers_csv = servers.connect(",");
         let c_servers = CString::new(servers_csv).unwrap();
         let ares_rc = unsafe {
@@ -279,9 +300,37 @@ impl Channel {
         if ares_rc != c_ares_sys::ARES_SUCCESS {
             Err(ares_error(ares_rc))
         } else {
-            Ok(())
+            Ok(self)
         }
     }
+
+    /// Set the local IPv4 address from which to make queries.
+    pub fn set_local_ipv4(&mut self, ipv4: &Ipv4Addr) -> &mut Self {
+        let value = ipv4.octets().iter().fold(0, |v, &o| (v << 8) | o as u32);
+        unsafe { c_ares_sys::ares_set_local_ip4(self.ares_channel, value); }
+        self
+    }
+
+    /// Set the local IPv6 address from which to make queries.
+    pub fn set_local_ipv6(&mut self, ipv6: &Ipv6Addr) -> &mut Self {
+        let in6_addr = ipv6_as_in6_addr(ipv6);
+        unsafe {
+            c_ares_sys::ares_set_local_ip6(
+                self.ares_channel,
+                &in6_addr as *const _ as *const libc::c_uchar);
+        }
+        self
+    }
+
+    /// Set the local device from which to make queries.
+    pub fn set_local_device(&mut self, device: &str) -> &mut Self {
+        let c_dev = CString::new(device).unwrap();
+        unsafe {
+            c_ares_sys::ares_set_local_dev(self.ares_channel, c_dev.as_ptr());
+        }
+        self
+    }
+
 
     /// Look up the A records associated with `name`.
     ///
@@ -461,6 +510,104 @@ impl Channel {
                 Some(query_soa_callback::<F>),
                 c_arg);
         }
+    }
+
+    /// Perform a host query by address.
+    ///
+    /// On completion, `handler` is called with the result.
+    pub fn get_host_by_address<F>(
+        &mut self,
+        address: &IpAddr,
+        handler: F) where F: FnOnce(Result<HostResults, AresError>) + 'static {
+        let c_addr = match *address {
+            IpAddr::V4(ref v4) => {
+                let in_addr = ipv4_as_in_addr(v4);
+                &in_addr as *const _ as *const libc::c_void
+            },
+            IpAddr::V6(ref v6) => {
+                let in6_addr = ipv6_as_in6_addr(v6);
+                &in6_addr as *const _ as *const libc::c_void
+            },
+        };
+        let (family, length) = match *address {
+            IpAddr::V4(_) => {
+                (AddressFamily::INET, mem::size_of::<libc::in_addr>())
+            },
+            IpAddr::V6(_) => {
+                (AddressFamily::INET6, mem::size_of::<libc::in6_addr>())
+            },
+        };
+        unsafe {
+            let c_arg: *mut libc::c_void = mem::transmute(Box::new(handler));
+            c_ares_sys::ares_gethostbyaddr(
+                self.ares_channel,
+                c_addr,
+                length as libc::c_int,
+                family as libc::c_int,
+                Some(get_host_callback::<F>),
+                c_arg);
+        }
+    }
+
+    /// Perform a host query by name.
+    ///
+    /// On completion, `handler` is called with the result.
+    pub fn get_host_by_name<F>(
+        &mut self,
+        name: &str,
+        family: AddressFamily,
+        handler: F) where F: FnOnce(Result<HostResults, AresError>) + 'static {
+        let c_name = CString::new(name).unwrap();
+        unsafe {
+            let c_arg: *mut libc::c_void = mem::transmute(Box::new(handler));
+            c_ares_sys::ares_gethostbyname(
+                self.ares_channel,
+                c_name.as_ptr(),
+                family as libc::c_int,
+                Some(get_host_callback::<F>),
+                c_arg);
+        }
+    }
+
+    /// Address-to-nodename translation in protocol-independent manner.
+    ///
+    /// The valid values for `flags` are documented
+    /// [here](ni_flags/index.html).
+    ///
+    /// On completion, `handler` is called with the result.
+    pub fn get_name_info<F>(
+        &mut self,
+        address: &SocketAddr,
+        flags: NIFlags,
+        handler: F) where F: FnOnce(Result<NameInfoResult, AresError>) + 'static {
+        let c_addr = match *address {
+            SocketAddr::V4(ref v4) => {
+                let sockaddr = socket_addrv4_as_sockaddr_in(v4);
+                &sockaddr as *const _ as *const libc::sockaddr
+            },
+            SocketAddr::V6(ref v6) => {
+                let sockaddr = socket_addrv6_as_sockaddr_in6(v6);
+                &sockaddr as *const _ as *const libc::sockaddr
+            },
+        };
+        unsafe {
+            let c_arg: *mut libc::c_void = mem::transmute(Box::new(handler));
+            c_ares_sys::ares_getnameinfo(
+                self.ares_channel,
+                c_addr,
+                mem::size_of::<libc::sockaddr>() as c_ares_sys::ares_socklen_t,
+                flags.bits(),
+                Some(get_name_info_callback::<F>),
+                c_arg);
+        }
+    }
+
+    /// Cancel all requests made on this `Channel`.
+    ///
+    /// Callbacks will be invoked for each pending query, passing a result
+    /// `Err(AresError::ECANCELLED)`.
+    pub fn cancel(&mut self) {
+        unsafe { c_ares_sys::ares_cancel(self.ares_channel); }
     }
 }
 
