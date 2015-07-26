@@ -68,9 +68,11 @@ fn main() {
     // Do some other stuff here while we wait
     // ...
 
-    // Kick the resolver...
-    resolver.ares_channel.wait_channel();
-
     // Wait for and print the results
+    while !results_future.is_ready() {
+        // Kick the resolver...
+        resolver.ares_channel.wait_channel();
+    }
+
     print_a_results(results_future.await().ok().expect("Future failed to complete"));
 }

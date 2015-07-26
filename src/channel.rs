@@ -293,17 +293,14 @@ impl Channel {
                 mem::transmute(&socks),
                 16) //c_ares_sys::ARES_GETSOCK_MAXNUM
         };
-        println!("Bitmask: {}", bitmask);
 
         for s in socks.into_iter() {
             println!("Sock: {}", s);
             if bitmask & 1 != 0 {
-                println!("Readable socket");
                 self.process_fd(*s, c_ares_sys::ARES_SOCKET_BAD);
             }
             //1 << c_ares_sys::ARES_GETSOCK_MAXNUM
             if bitmask & 0x10000 != 0 {
-                println!("Writeable socket");
                 self.process_fd(c_ares_sys::ARES_SOCKET_BAD, *s);
             }
             bitmask <<= 1;
