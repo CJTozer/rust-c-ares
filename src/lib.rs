@@ -33,7 +33,9 @@ mod cname;
 pub mod flags;
 mod host;
 mod mx;
+mod nameinfo;
 mod naptr;
+pub mod ni_flags;
 mod ns;
 mod ptr;
 mod types;
@@ -67,6 +69,9 @@ pub use host::{
 pub use mx::{
     MXResult,
     MXResults,
+};
+pub use nameinfo::{
+    NameInfoResult,
 };
 pub use naptr::{
     NAPTRResult,

@@ -20,7 +20,7 @@ pub struct SRVResults {
 /// The contents of a single SRV record.
 pub struct SRVResult<'a> {
     // A single result - reference into an `SRVResults`.
-    srv_reply: *mut c_ares_sys::Struct_ares_srv_reply,
+    srv_reply: *const c_ares_sys::Struct_ares_srv_reply,
     phantom: PhantomData<&'a c_ares_sys::Struct_ares_srv_reply>,
 }
 
@@ -59,7 +59,7 @@ impl SRVResults {
 }
 
 pub struct SRVResultsIterator<'a> {
-    next: *mut c_ares_sys::Struct_ares_srv_reply,
+    next: *const c_ares_sys::Struct_ares_srv_reply,
     phantom: PhantomData<&'a c_ares_sys::Struct_ares_srv_reply>,
 }
 
@@ -85,10 +85,7 @@ impl<'a> IntoIterator for &'a SRVResults {
     type IntoIter = SRVResultsIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        SRVResultsIterator {
-            next: self.srv_reply,
-            phantom: PhantomData,
-        }
+        self.iter()
     }
 }
 
@@ -139,12 +136,12 @@ pub unsafe extern "C" fn query_srv_callback<F>(
     abuf: *mut libc::c_uchar,
     alen: libc::c_int)
     where F: FnOnce(Result<SRVResults, AresError>) + 'static {
+    let handler: Box<F> = mem::transmute(arg);
     let result = if status != c_ares_sys::ARES_SUCCESS {
         Err(ares_error(status))
     } else {
         let data = slice::from_raw_parts(abuf, alen as usize);
         SRVResults::parse_from(data)
     };
-    let handler: Box<F> = mem::transmute(arg);
     handler(result);
 }

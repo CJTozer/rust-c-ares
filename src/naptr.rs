@@ -19,7 +19,7 @@ pub struct NAPTRResults {
 
 /// The contents of a single NAPTR record.
 pub struct NAPTRResult<'a> {
-    naptr_reply: *mut c_ares_sys::Struct_ares_naptr_reply,
+    naptr_reply: *const c_ares_sys::Struct_ares_naptr_reply,
     phantom: PhantomData<&'a c_ares_sys::Struct_ares_naptr_reply>,
 }
 
@@ -32,7 +32,7 @@ impl NAPTRResults {
     /// Obtain a `NAPTRResults` from the response to a NAPTR lookup.
     #[cfg(not(feature = "old-cares"))]
     pub fn parse_from(data: &[u8]) -> Result<NAPTRResults, AresError> {
-        let mut naptr_reply: *mut c_ares_sys::Struct_ares_naptr_reply = 
+        let mut naptr_reply: *mut c_ares_sys::Struct_ares_naptr_reply =
             ptr::null_mut();
         let parse_status = unsafe {
             c_ares_sys::ares_parse_naptr_reply(
@@ -67,7 +67,7 @@ impl NAPTRResults {
 }
 
 pub struct NAPTRResultsIterator<'a> {
-    next: *mut c_ares_sys::Struct_ares_naptr_reply,
+    next: *const c_ares_sys::Struct_ares_naptr_reply,
     phantom: PhantomData<&'a c_ares_sys::Struct_ares_naptr_reply>,
 }
 
@@ -93,10 +93,7 @@ impl<'a> IntoIterator for &'a NAPTRResults {
     type IntoIter = NAPTRResultsIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        NAPTRResultsIterator {
-            next: self.naptr_reply,
-            phantom: PhantomData,
-        }
+        self.iter()
     }
 }
 
@@ -169,12 +166,12 @@ pub unsafe extern "C" fn query_naptr_callback<F>(
     abuf: *mut libc::c_uchar,
     alen: libc::c_int)
     where F: FnOnce(Result<NAPTRResults, AresError>) + 'static {
+    let handler: Box<F> = mem::transmute(arg);
     let result = if status != c_ares_sys::ARES_SUCCESS {
         Err(ares_error(status))
     } else {
         let data = slice::from_raw_parts(abuf, alen as usize);
         NAPTRResults::parse_from(data)
     };
-    let handler: Box<F> = mem::transmute(arg);
     handler(result);
 }

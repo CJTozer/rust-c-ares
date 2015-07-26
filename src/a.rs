@@ -23,7 +23,7 @@ pub struct AResults {
 
 /// The contents of a single A record.
 pub struct AResult<'a> {
-    h_addr: *mut libc::c_char,
+    h_addr: *const libc::c_char,
     phantom: PhantomData<&'a hostent>,
 }
 
@@ -65,14 +65,14 @@ impl AResults {
     /// Returns an iterator over the `AResult` values in this `AResults`.
     pub fn iter(&self) -> AResultsIterator {
         AResultsIterator {
-            next: unsafe { (*self.hostent).h_addr_list },
+            next: unsafe { (*self.hostent).h_addr_list as *const *const _ },
             phantom: PhantomData,
         }
     }
 }
 
 pub struct AResultsIterator<'a> {
-    next: *mut *mut libc::c_char,
+    next: *const *const libc::c_char,
     phantom: PhantomData<&'a hostent>,
 }
 
@@ -98,10 +98,7 @@ impl<'a> IntoIterator for &'a AResults {
     type IntoIter = AResultsIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        AResultsIterator {
-            next: unsafe { (*self.hostent).h_addr_list },
-            phantom: PhantomData,
-        }
+        self.iter()
     }
 }
 
@@ -141,12 +138,12 @@ pub unsafe extern "C" fn query_a_callback<F>(
     abuf: *mut libc::c_uchar,
     alen: libc::c_int)
     where F: FnOnce(Result<AResults, AresError>) + 'static {
+    let handler: Box<F> = mem::transmute(arg);
     let result = if status != c_ares_sys::ARES_SUCCESS {
         Err(ares_error(status))
     } else {
         let data = slice::from_raw_parts(abuf, alen as usize);
         AResults::parse_from(data)
     };
-    let handler: Box<F> = mem::transmute(arg);
     handler(result);
 }

@@ -22,7 +22,7 @@ pub struct PTRResults {
 
 /// The contents of a single PTR record.
 pub struct PTRResult<'a> {
-    h_alias: *mut libc::c_char,
+    h_alias: *const libc::c_char,
     phantom: PhantomData<&'a hostent>,
 }
 
@@ -38,7 +38,7 @@ impl PTRResults {
                 data.len() as libc::c_int,
                 c_dummy_ip.as_ptr() as *const libc::c_void,
                 dummy_ip.len() as libc::c_int,
-                libc::consts::os::bsd44::AF_INET,
+                libc::AF_INET,
                 &mut hostent as *mut *mut _ as *mut *mut c_ares_sys::Struct_hostent)
         };
         if parse_status != c_ares_sys::ARES_SUCCESS {
@@ -59,14 +59,14 @@ impl PTRResults {
     /// `PTRResults`.
     pub fn iter(&self) -> PTRResultsIterator {
         PTRResultsIterator {
-            next: unsafe { (*self.hostent).h_aliases },
+            next: unsafe { (*self.hostent).h_aliases as *const *const _ },
             phantom: PhantomData,
         }
     }
 }
 
 pub struct PTRResultsIterator<'a> {
-    next: *mut *mut libc::c_char,
+    next: *const *const libc::c_char,
     phantom: PhantomData<&'a hostent>,
 }
 
@@ -92,10 +92,7 @@ impl<'a> IntoIterator for &'a PTRResults {
     type IntoIter = PTRResultsIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        PTRResultsIterator {
-            next: unsafe { (*self.hostent).h_aliases },
-            phantom: PhantomData,
-        }
+        self.iter()
     }
 }
 
@@ -132,12 +129,12 @@ pub unsafe extern "C" fn query_ptr_callback<F>(
     abuf: *mut libc::c_uchar,
     alen: libc::c_int)
     where F: FnOnce(Result<PTRResults, AresError>) + 'static {
+    let handler: Box<F> = mem::transmute(arg);
     let result = if status != c_ares_sys::ARES_SUCCESS {
         Err(ares_error(status))
     } else {
         let data = slice::from_raw_parts(abuf, alen as usize);
         PTRResults::parse_from(data)
     };
-    let handler: Box<F> = mem::transmute(arg);
     handler(result);
 }
