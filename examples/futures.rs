@@ -30,8 +30,8 @@ impl Resolver {
     fn new() -> Resolver {
         // Dummy callback.
         //
-        // Not used here as we explicitly use `wait_channel` when we need to 
-        // get at the results.
+        // Not used here as the `Future` explicitly calls `wait_channel` when
+        // we need to get at the results.
         //
         // I'd prefer that this callback could call `process_fd` on the
         // underlying `c_ares_sys::ares_channel`, but given the callback is
