@@ -2,7 +2,7 @@
 extern crate c_ares;
 extern crate eventual;
 
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex};
 use eventual::{Future, Async};
 
 // TODO - commonize with the other example(s).
@@ -24,7 +24,7 @@ fn print_a_results(result: Result<c_ares::AResults, c_ares::AresError>) {
 }
 
 struct Resolver {
-    ares_channel: c_ares::Channel,
+    ares_channel: Arc<Mutex<c_ares::Channel>>,
 }
 impl Resolver {
     fn new() -> Resolver {
@@ -43,18 +43,21 @@ impl Resolver {
             .ok()
             .expect("Failed to create channel");
 
-        Resolver { ares_channel: ares_channel }
+        Resolver { ares_channel: Arc::new(Mutex::new(ares_channel)) }
     }
 
     fn a_query_as_future(&mut self, name: &str) -> Future<Result<c_ares::AResults, c_ares::AresError>, ()> {
         // Make the query.
         let (tx, rx) = mpsc::channel();
-        self.ares_channel.query_a(name, move |results| {
+        let mut channel = self.ares_channel.lock().unwrap();
+        channel.query_a(name, move |results| {
             tx.send(results).unwrap();
         });
         
         // Return a Future
+        let channel_clone = self.ares_channel.clone();
         Future::spawn(move || {
+            // This should do the wait_channel stuff really...
             rx.recv().unwrap()
         })
     }
@@ -71,7 +74,8 @@ fn main() {
     // Wait for and print the results
     while !results_future.is_ready() {
         // Kick the resolver...
-        resolver.ares_channel.wait_channel();
+        let mut channel = resolver.ares_channel.lock().unwrap();
+        channel.wait_channel();
     }
 
     print_a_results(results_future.await().ok().expect("Future failed to complete"));
