@@ -285,14 +285,28 @@ impl Channel {
     }
 
     /// Wait for results...
-    pub fn wait_channel(&self) {
-        unsafe {
-            let mut socks: [c_ares_sys::ares_socket_t; 16] = [0; 16]; //c_ares_sys::ARES_GETSOCK_MAXNUM
-            let bitmask = c_ares_sys::ares_getsock(
+    pub fn wait_channel(&mut self) {
+        let socks: [c_ares_sys::ares_socket_t; 16] = [0; 16]; //c_ares_sys::ARES_GETSOCK_MAXNUM
+        let mut bitmask = unsafe {
+            c_ares_sys::ares_getsock(
                 self.ares_channel,
                 mem::transmute(&socks),
-                16); //c_ares_sys::ARES_GETSOCK_MAXNUM
-            println!("Bitmask: {}", bitmask);
+                16) //c_ares_sys::ARES_GETSOCK_MAXNUM
+        };
+        println!("Bitmask: {}", bitmask);
+
+        for s in socks.into_iter() {
+            println!("Sock: {}", s);
+            if bitmask & 1 != 0 {
+                println!("Readable socket");
+                self.process_fd(*s, c_ares_sys::ARES_SOCKET_BAD);
+            }
+            //1 << c_ares_sys::ARES_GETSOCK_MAXNUM
+            if bitmask & 0x10000 != 0 {
+                println!("Writeable socket");
+                self.process_fd(c_ares_sys::ARES_SOCKET_BAD, *s);
+            }
+            bitmask <<= 1;
         }
     }
 
