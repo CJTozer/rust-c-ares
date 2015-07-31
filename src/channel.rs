@@ -24,6 +24,7 @@ use cname::{
     CNameResult,
     query_cname_callback,
 };
+use error::AresError;
 use flags::Flags;
 use host::{
     HostResults,
@@ -56,7 +57,6 @@ use srv::{
 };
 use types::{
     AddressFamily,
-    AresError,
     DnsClass,
     IpAddr,
     QueryType,
@@ -311,12 +311,27 @@ impl Channel {
         }
     }
 
+    /// Retrieve the set of socket descriptors which the calling application
+    /// should wait on for reading and / or writing.
+    pub fn get_sock(&self) -> GetSock {
+        let mut socks = [0; c_ares_sys::ARES_GETSOCK_MAXNUM];
+        let bitmask = unsafe {
+            c_ares_sys::ares_getsock(
+                self.ares_channel,
+                socks.as_mut_ptr(),
+                c_ares_sys::ARES_GETSOCK_MAXNUM as libc::c_int)
+        };
+        GetSock::new(socks, bitmask as u32)
+    }
+
     /// Set the list of servers to contact, instead of the servers specified
     /// in resolv.conf or the local named.
     ///
     /// String format is `host[:port]`.  IPv6 addresses with ports require
     /// square brackets eg `[2001:4860:4860::8888]:53`.
-    pub fn set_servers(&mut self, servers: &[&str]) -> Result<&mut Self, AresError> {
+    pub fn set_servers(
+        &mut self,
+        servers: &[&str]) -> Result<&mut Self, AresError> {
         let servers_csv = servers.connect(",");
         let c_servers = CString::new(servers_csv).unwrap();
         let ares_rc = unsafe {
@@ -605,7 +620,8 @@ impl Channel {
         &mut self,
         address: &SocketAddr,
         flags: NIFlags,
-        handler: F) where F: FnOnce(Result<NameInfoResult, AresError>) + 'static {
+        handler: F)
+        where F: FnOnce(Result<NameInfoResult, AresError>) + 'static {
         let c_addr = match *address {
             SocketAddr::V4(ref v4) => {
                 let sockaddr = socket_addrv4_as_sockaddr_in(v4);
@@ -659,4 +675,70 @@ pub unsafe extern "C" fn socket_state_callback<F>(
     where F: FnMut(io::RawFd, bool, bool) + 'static {
     let handler = data as *mut F;
     (*handler)(socket_fd as io::RawFd, readable != 0, writable != 0);
+}
+
+/// Information about the set of sockets that `c-ares` is interested in, as
+/// returned by `get_sock()`.
+#[derive(Copy, Clone)]
+pub struct GetSock {
+    socks: [c_ares_sys::ares_socket_t; c_ares_sys::ARES_GETSOCK_MAXNUM],
+    bitmask: u32,
+}
+
+impl GetSock {
+    fn new(
+        socks: [c_ares_sys::ares_socket_t; c_ares_sys::ARES_GETSOCK_MAXNUM],
+        bitmask: u32) -> GetSock {
+        GetSock {
+            socks: socks,
+            bitmask: bitmask,
+        }
+    }
+
+    /// Returns an iterator over the sockets that `c-ares` is interested in.
+    ///
+    /// Iterator items are `(fd, readable, writable)`.
+    pub fn iter(&self) -> GetSockIterator {
+        GetSockIterator {
+            next: 0,
+            getsock: self,
+        }
+    }
+}
+
+pub struct GetSockIterator<'a> {
+    next: usize,
+    getsock: &'a GetSock,
+}
+
+impl<'a> Iterator for GetSockIterator<'a> {
+    type Item = (io::RawFd, bool, bool);
+    fn next(&mut self) -> Option<Self::Item> {
+        let index = self.next;
+        if self.next == c_ares_sys::ARES_GETSOCK_MAXNUM {
+            None
+        } else {
+            let fd = self.getsock.socks[index] as io::RawFd;
+            let bit = 1 << index;
+            let readable = (self.getsock.bitmask & bit) != 0;
+            let bit = bit << c_ares_sys::ARES_GETSOCK_MAXNUM;
+            let writable = (self.getsock.bitmask & bit) != 0;
+            self.next = self.next + 1;
+
+            if readable || writable {
+                Some((fd, readable, writable))
+            } else {
+                None
+            }
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a GetSock {
+    type Item = (io::RawFd, bool, bool);
+    type IntoIter = GetSockIterator<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
 }

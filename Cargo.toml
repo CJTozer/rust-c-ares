@@ -1,7 +1,7 @@
 [package]
 name = "c-ares"
 license = "MIT"
-version = "0.8.0"
+version = "0.10.0"
 authors = ["David Hotham"]
 description = """
 A Rust wrapper for the c-ares library, for asynchronous DNS requests.
@@ -24,6 +24,7 @@ git = "https://github.com/carllerche/eventual"
 
 [dev-dependencies]
 mio = "*"
+nix = "*"
 
 [features]
 old-cares = []
