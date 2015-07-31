@@ -1,8 +1,10 @@
-// This example drives c-ares using an mio::EventLoop.
+// This example uses the callback mechanism to find out which file descriptors
+// c-ares cares about.  This is a good fit for an event loop; here we use mio.
 extern crate c_ares;
 extern crate mio;
 
 use std::collections::HashSet;
+use std::error::Error;
 use std::mem;
 use std::net::{
     Ipv4Addr,
@@ -50,8 +52,16 @@ impl mio::Handler for CAresEventHandler {
         token: mio::Token,
         events: mio::EventSet) {
         let fd = token.as_usize() as io::RawFd;
-        let read_fd = if events.is_readable() { fd } else { c_ares::INVALID_FD };
-        let write_fd = if events.is_writable() { fd } else { c_ares::INVALID_FD };
+        let read_fd = if events.is_readable() {
+            fd
+        } else {
+            c_ares::INVALID_FD
+        };
+        let write_fd = if events.is_writable() {
+            fd
+        } else {
+            c_ares::INVALID_FD
+        };
         self.ares_channel.process_fd(read_fd, write_fd);
     }
 
@@ -130,66 +140,10 @@ impl CAresEventHandler {
     }
 }
 
-fn print_a_results(result: Result<c_ares::AResults, c_ares::AresError>) {
-    println!("");
-    match result {
-        Err(e) => {
-            let err_string = c_ares::str_error(e);
-            println!("A lookup failed with error '{}'", err_string);
-        }
-        Ok(a_results) => {
-            println!("Successful A lookup...");
-            println!("Hostname: {}", a_results.hostname());
-            for a_result in &a_results {
-                println!("{:}", a_result.ipv4_addr());
-            }
-        }
-    }
-}
-
-fn print_aaaa_results(result: Result<c_ares::AAAAResults, c_ares::AresError>) {
-    println!("");
-    match result {
-        Err(e) => {
-            let err_string = c_ares::str_error(e);
-            println!("AAAA lookup failed with error '{}'", err_string);
-        }
-        Ok(aaaa_results) => {
-            println!("Successful AAAA lookup...");
-            println!("Hostname: {}", aaaa_results.hostname());
-            for aaaa_result in &aaaa_results {
-                println!("{:}", aaaa_result.ipv6_addr());
-            }
-        }
-    }
-}
-
-fn print_srv_results(result: Result<c_ares::SRVResults, c_ares::AresError>) {
-    println!("");
-    match result {
-        Err(e) => {
-            let err_string = c_ares::str_error(e);
-            println!("SRV lookup failed with error '{}'", err_string);
-        }
-        Ok(srv_results) => {
-            println!("Successful SRV lookup...");
-            for srv_result in &srv_results {
-                println!("host: {} (port: {}), priority: {} weight: {}",
-                         srv_result.host(),
-                         srv_result.port(),
-                         srv_result.weight(),
-                         srv_result.priority());
-            }
-        }
-    }
-}
-
 fn print_cname_result(result: Result<c_ares::CNameResult, c_ares::AresError>) {
-    println!("");
     match result {
         Err(e) => {
-            let err_string = c_ares::str_error(e);
-            println!("CNAME lookup failed with error '{}'", err_string);
+            println!("CNAME lookup failed with error '{}'", e.description());
         }
         Ok(cname_result) => {
             println!("Successful CNAME lookup...");
@@ -199,11 +153,9 @@ fn print_cname_result(result: Result<c_ares::CNameResult, c_ares::AresError>) {
 }
 
 fn print_mx_results(result: Result<c_ares::MXResults, c_ares::AresError>) {
-    println!("");
     match result {
         Err(e) => {
-            let err_string = c_ares::str_error(e);
-            println!("MX lookup failed with error '{}'", err_string);
+            println!("MX lookup failed with error '{}'", e.description());
         }
         Ok(mx_results) => {
             println!("Successful MX lookup...");
@@ -219,11 +171,9 @@ fn print_mx_results(result: Result<c_ares::MXResults, c_ares::AresError>) {
 
 fn print_naptr_results(
     result: Result<c_ares::NAPTRResults, c_ares::AresError>) {
-    println!("");
     match result {
         Err(e) => {
-            let err_string = c_ares::str_error(e);
-            println!("NAPTR lookup failed with error '{}'", err_string);
+            println!("NAPTR lookup failed with error '{}'", e.description());
         }
         Ok(naptr_results) => {
             println!("Successful NAPTR lookup...");
@@ -242,11 +192,9 @@ fn print_naptr_results(
 }
 
 fn print_ns_results(result: Result<c_ares::NSResults, c_ares::AresError>) {
-    println!("");
     match result {
         Err(e) => {
-            let err_string = c_ares::str_error(e);
-            println!("NS lookup failed with error '{}'", err_string);
+            println!("NS lookup failed with error '{}'", e.description());
         }
         Ok(ns_results) => {
             println!("Successful NS lookup...");
@@ -258,11 +206,9 @@ fn print_ns_results(result: Result<c_ares::NSResults, c_ares::AresError>) {
 }
 
 fn print_ptr_results(result: Result<c_ares::PTRResults, c_ares::AresError>) {
-    println!("");
     match result {
         Err(e) => {
-            let err_string = c_ares::str_error(e);
-            println!("PTR lookup failed with error '{}'", err_string);
+            println!("PTR lookup failed with error '{}'", e.description());
         }
         Ok(ptr_results) => {
             println!("Successful PTR lookup...");
@@ -274,11 +220,9 @@ fn print_ptr_results(result: Result<c_ares::PTRResults, c_ares::AresError>) {
 }
 
 fn print_txt_results(result: Result<c_ares::TXTResults, c_ares::AresError>) {
-    println!("");
     match result {
         Err(e) => {
-            let err_string = c_ares::str_error(e);
-            println!("TXT lookup failed with error '{}'", err_string);
+            println!("TXT lookup failed with error '{}'", e.description());
         }
         Ok(txt_results) => {
             println!("Successful TXT lookup...");
@@ -290,11 +234,9 @@ fn print_txt_results(result: Result<c_ares::TXTResults, c_ares::AresError>) {
 }
 
 fn print_soa_result(result: Result<c_ares::SOAResult, c_ares::AresError>) {
-    println!("");
     match result {
         Err(e) => {
-            let err_string = c_ares::str_error(e);
-            println!("SOA lookup failed with error '{}'", err_string);
+            println!("SOA lookup failed with error '{}'", e.description());
         }
         Ok(soa_result) => {
             println!("Successful SOA lookup...");
@@ -309,11 +251,9 @@ fn print_soa_result(result: Result<c_ares::SOAResult, c_ares::AresError>) {
 }
 
 fn print_host_results(result: Result<c_ares::HostResults, c_ares::AresError>) {
-    println!("");
     match result {
         Err(e) => {
-            let err_string = c_ares::str_error(e);
-            println!("Host lookup failed with error '{}'", err_string);
+            println!("Host lookup failed with error '{}'", e.description());
         }
         Ok(host_results) => {
             println!("Successful host lookup...");
@@ -331,12 +271,11 @@ fn print_host_results(result: Result<c_ares::HostResults, c_ares::AresError>) {
     }
 }
 
-fn print_name_info_result(result: Result<c_ares::NameInfoResult, c_ares::AresError>) {
-    println!("");
+fn print_name_info_result(
+    result: Result<c_ares::NameInfoResult, c_ares::AresError>) {
     match result {
         Err(e) => {
-            let err_string = c_ares::str_error(e);
-            println!("Name info lookup failed with error '{}'", err_string);
+            println!("Name info lookup failed with error '{}'", e.description());
         }
         Ok(name_info_result) => {
             println!("Successful name info lookup...");
@@ -357,7 +296,8 @@ fn main() {
     let event_loop_channel_clone = event_loop_channel.clone();
     let sock_callback = move |fd: io::RawFd, readable: bool, writable: bool| {
         event_loop_channel_clone
-            .send(CAresHandlerMessage::RegisterInterest(fd, readable, writable))
+            .send(
+                CAresHandlerMessage::RegisterInterest(fd, readable, writable))
             .ok()
             .expect("Failed to send RegisterInterest");
     };
@@ -374,32 +314,16 @@ fn main() {
     // Set up some queries.
     let (results_tx, results_rx) = mpsc::channel();
     let tx = results_tx.clone();
-    ares_channel.query_a("apple.com", move |results| {
-        print_a_results(results);
-        tx.send(()).unwrap()
-    });
-
-    let tx = results_tx.clone();
-    ares_channel.query_aaaa("google.com", move |results| {
-        print_aaaa_results(results);
-        tx.send(()).unwrap()
-    });
-
-    let tx = results_tx.clone();
-    ares_channel.query_srv("_xmpp-server._tcp.gmail.com", move |result| {
-        print_srv_results(result);
-        tx.send(()).unwrap()
-    });
-
-    let tx = results_tx.clone();
     ares_channel.query_cname("dimbleby.github.io", move |result| {
+        println!("");
         print_cname_result(result);
         tx.send(()).unwrap()
     });
 
     let tx = results_tx.clone();
-    ares_channel.query_mx("gmail.com", move |results| {
-        print_mx_results(results);
+    ares_channel.query_mx("gmail.com", move |result| {
+        println!("");
+        print_mx_results(result);
         tx.send(()).unwrap()
     });
 
@@ -407,32 +331,37 @@ fn main() {
     ares_channel.query_naptr(
         "4.3.2.1.5.5.5.0.0.8.1.e164.arpa.",
         move |results| {
+            println!("");
             print_naptr_results(results);
             tx.send(()).unwrap()
         }
     );
 
     let tx = results_tx.clone();
-    ares_channel.query_ns("google.com", move |results| {
-        print_ns_results(results);
+    ares_channel.query_ns("google.com", move |result| {
+        println!("");
+        print_ns_results(result);
         tx.send(()).unwrap()
     });
 
     let tx = results_tx.clone();
-    ares_channel.query_ptr("14.210.58.216.in-addr.arpa", move |results| {
-        print_ptr_results(results);
+    ares_channel.query_ptr("14.210.58.216.in-addr.arpa", move |result| {
+        println!("");
+        print_ptr_results(result);
         tx.send(()).unwrap()
     });
 
     let tx = results_tx.clone();
-    ares_channel.query_txt("google.com", move |results| {
-        print_txt_results(results);
+    ares_channel.query_txt("google.com", move |result| {
+        println!("");
+        print_txt_results(result);
         tx.send(()).unwrap()
     });
 
     let tx = results_tx.clone();
-    ares_channel.query_soa("google.com", move |results| {
-        print_soa_result(results);
+    ares_channel.query_soa("google.com", move |result| {
+        println!("");
+        print_soa_result(result);
         tx.send(()).unwrap()
     });
 
@@ -440,8 +369,9 @@ fn main() {
     ares_channel.get_host_by_name(
         "google.com",
         c_ares::AddressFamily::INET,
-        move |results| {
-            print_host_results(results);
+        move |result| {
+            println!("");
+            print_host_results(result);
             tx.send(()).unwrap()
         }
     );
@@ -449,6 +379,7 @@ fn main() {
     let tx = results_tx.clone();
     let ipv4 = c_ares::IpAddr::V4(Ipv4Addr::new(216, 58, 208, 78));
     ares_channel.get_host_by_address(&ipv4, move |results| {
+        println!("");
         print_host_results(results);
         tx.send(()).unwrap()
     });
@@ -457,6 +388,7 @@ fn main() {
     let ipv6 = c_ares::IpAddr::V6(
         Ipv6Addr::new(0x2a00, 0x1450, 0x4009, 0x80a, 0, 0, 0, 0x200e));
     ares_channel.get_host_by_address(&ipv6, move |results| {
+        println!("");
         print_host_results(results);
         tx.send(()).unwrap()
     });
@@ -468,6 +400,7 @@ fn main() {
         &sock,
         c_ares::ni_flags::LOOKUPHOST | c_ares::ni_flags::LOOKUPSERVICE,
         move |result| {
+            println!("");
             print_name_info_result(result);
             tx.send(()).unwrap()
         }
@@ -486,7 +419,7 @@ fn main() {
     });
 
     // Wait for results to roll in.
-    for _ in 0..14 {
+    for _ in 0..11 {
         results_rx.recv().unwrap();
     }
 

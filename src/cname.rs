@@ -8,10 +8,8 @@ use std::ptr;
 use std::slice;
 use std::str;
 
-use types::{
-    AresError,
-    hostent,
-};
+use error::AresError;
+use types::hostent;
 use utils::ares_error;
 
 /// The result of a successful CNAME lookup.
@@ -28,7 +26,8 @@ impl CNameResult {
             c_ares_sys::ares_parse_a_reply(
                 data.as_ptr(),
                 data.len() as libc::c_int,
-                &mut hostent as *mut *mut _ as *mut *mut c_ares_sys::Struct_hostent,
+                &mut hostent
+                    as *mut *mut _ as *mut *mut c_ares_sys::Struct_hostent,
                 ptr::null_mut(),
                 ptr::null_mut())
         };
